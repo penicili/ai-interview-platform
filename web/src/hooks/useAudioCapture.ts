@@ -20,11 +20,14 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
   // Mute gate — mic stays hot, we just skip sending frames.
   // Avoids AudioContext.suspend/resume async state issues entirely.
   const mutedRef = useRef(false);
-  // Guards the track listeners. t.stop() fires 'ended' asynchronously, so
-  // without this a clean shutdown would flip the flag back on afterwards and
-  // leave the candidate being told we cannot hear them after the interview
-  // has already finished.
+  // Guards every microphone-loss signal: the track listeners, the readyState
+  // poll below, and the worklet's port messages. Shutdown flips this false
+  // BEFORE the track is stopped, so a late callback cannot tell the candidate
+  // "we can't hear you" once the interview has already finished.
   const activeRef = useRef(false);
+  // Chromium does not announce a dead track through events alone, so the
+  // readyState is polled while capture is live. See the note in start().
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const start = useCallback(async () => {
     if (isCapturing) return;
@@ -73,6 +76,22 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
         track.addEventListener("ended", markLost);
         track.addEventListener("mute", markLost);
         track.addEventListener("unmute", markRestored);
+
+        // Events are not enough on their own, and this is measured rather
+        // than assumed. Once a track ends, createMediaStreamSource keeps
+        // feeding the worklet SILENCE instead of an empty input — input still
+        // looks present — so the worklet's no_input branch never fires, and a
+        // stop() this page performed itself raises no 'ended' either. On
+        // Chromium 156 nothing warned at all until readyState was read
+        // directly, and that read was 'ended' in every observed case.
+        //
+        // 'ended' is terminal: it can be set but never cleared, so this can
+        // only ever warn. It also cannot false-positive on a quiet candidate,
+        // which is the whole reason the threshold above exists.
+        if (watchdogRef.current) clearInterval(watchdogRef.current);
+        watchdogRef.current = setInterval(() => {
+          if (activeRef.current && track.readyState === "ended") setMicLost(true);
+        }, 1000);
       }
 
       activeRef.current = true;
@@ -95,6 +114,10 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
 
   const stop = useCallback(() => {
     activeRef.current = false;
+    if (watchdogRef.current) {
+      clearInterval(watchdogRef.current);
+      watchdogRef.current = null;
+    }
     workletNodeRef.current?.disconnect();
     workletNodeRef.current = null;
     audioCtxRef.current?.close();
