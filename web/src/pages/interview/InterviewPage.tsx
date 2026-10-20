@@ -154,7 +154,7 @@ export default function InterviewPage() {
     onReconnected: handleReconnected,
   });
 
-  const { start: startCapture, stop: stopCapture, mute, unmute } = useAudioCapture({
+  const { start: startCapture, stop: stopCapture, mute, unmute, micLost } = useAudioCapture({
     onFrame: send,
   });
 
@@ -352,6 +352,26 @@ export default function InterviewPage() {
         <div className="flex items-center justify-between text-sm bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-4 py-2.5 mt-2">
           <span>Reconnected — please say <strong>"check"</strong> or continue your answer to resume.</span>
           <button className="ml-3 text-blue-500 hover:text-blue-700 shrink-0" onClick={() => setReconnectedPrompt(false)}>✕</button>
+        </div>
+      )}
+
+      {/* The microphone stopped delivering samples. Deliberately a warning and
+          not a session end: losing the mic is the candidate's side of the
+          problem, they can fix it, and ending the interview over it would
+          throw away every answer they have already given. The completed screen
+          returns earlier, so reaching here means the interview is live. */}
+      {micLost && (
+        <div className="flex items-start gap-2 text-sm bg-red-50 border border-red-200 text-red-800 rounded-lg px-4 py-2.5 mt-2">
+          <span className="animate-pulse mt-1">●</span>
+          <div>
+            <strong className="font-medium">We can't hear your microphone.</strong>
+            <p className="mt-0.5">
+              Your interview is still running. Check that your microphone is not
+              muted or turned off, and that the right device is selected — then
+              speak once to test it. This message clears on its own once sound
+              comes through.
+            </p>
+          </div>
         </div>
       )}
 
