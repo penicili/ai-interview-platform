@@ -47,6 +47,12 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
   // ended.
   const lastSoundAtRef = useRef(Date.now());
   const silencedRef = useRef(false);
+  // Whether the candidate is the one who is supposed to be talking. The
+  // transport gate is not a usable substitute: the socket reports 'active' as
+  // soon as it connects, the page unmutes on that, and the interviewer's
+  // greeting has not even started — so counting silence from the gate alone
+  // warned before the candidate had been given a turn.
+  const expectingSpeechRef = useRef(false);
 
   const start = useCallback(async () => {
     if (isCapturing) return;
@@ -134,10 +140,11 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
             return;
           }
 
-          // Only during the candidate's own turn. While the AI is speaking the
-          // gate is closed and the microphone is deliberately not being sent,
-          // so counting silence then would fire on every single turn.
+          // Only while the candidate is the one expected to speak, and only
+          // while the gate is open. A deliberate mute must not be nagged
+          // about, and the interviewer's own turn must never count.
           if (
+            expectingSpeechRef.current &&
             !mutedRef.current &&
             Date.now() - lastSoundAtRef.current > SILENCE_MS
           ) {
@@ -165,6 +172,21 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
     mutedRef.current = true;
   }, []);
 
+  // Called when the interviewer hands the turn over (and back). Opening the
+  // window restarts the clock, so a long AI turn is never counted against the
+  // candidate.
+  const setExpectingSpeech = useCallback((on: boolean) => {
+    expectingSpeechRef.current = on;
+    if (on) {
+      lastSoundAtRef.current = Date.now();
+    } else if (silencedRef.current) {
+      // The turn is over, so silence is no longer the candidate's problem.
+      // Only a warning this detector raised is cleared here.
+      silencedRef.current = false;
+      setMicLost(false);
+    }
+  }, []);
+
   const unmute = useCallback(() => {
     mutedRef.current = false;
     // The gate was closed while the AI spoke, so the silence clock is stale by
@@ -187,9 +209,10 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
     streamRef.current = null;
     mutedRef.current = false;
     silencedRef.current = false;
+    expectingSpeechRef.current = false;
     setMicLost(false);
     setIsCapturing(false);
   }, []);
 
-  return { start, stop, mute, unmute, isCapturing, micLost };
+  return { start, stop, mute, unmute, setExpectingSpeech, isCapturing, micLost };
 }

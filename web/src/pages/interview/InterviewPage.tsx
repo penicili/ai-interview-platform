@@ -154,9 +154,17 @@ export default function InterviewPage() {
     onReconnected: handleReconnected,
   });
 
-  const { start: startCapture, stop: stopCapture, mute, unmute, micLost } = useAudioCapture({
+  const { start: startCapture, stop: stopCapture, mute, unmute, setExpectingSpeech, micLost } = useAudioCapture({
     onFrame: send,
   });
+
+  // Silence only means something while it is the candidate's turn. The
+  // transport gate cannot answer that — it opens as soon as the socket is
+  // active, before the interviewer has said a word — so the speaker is what
+  // the detector follows.
+  useEffect(() => {
+    setExpectingSpeech(speaker === "candidate");
+  }, [speaker, setExpectingSpeech]);
 
   muteRef.current = mute;
   unmuteRef.current = unmute;
