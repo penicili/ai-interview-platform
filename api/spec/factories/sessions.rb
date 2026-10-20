@@ -2,8 +2,11 @@
 
 FactoryBot.define do
   factory :session do
-    tenant_id { create(:organization).id }
-    association :assessment, factory: %i[assessment]
+    # The assessment must share the session's tenant. candidate_info looks the
+    # assessment up scoped by session.tenant_id, so a session pointing at an
+    # assessment from another tenant is not merely inconsistent — it 404s.
+    tenant_id   { create(:organization).id }
+    assessment  { create(:assessment, tenant_id: tenant_id) }
     candidate_name { 'Test Candidate' }
     status { 'pending' }
 
