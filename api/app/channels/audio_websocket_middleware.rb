@@ -405,7 +405,11 @@ class AudioWebSocketMiddleware
       schedule_gemini_reconnect(browser_ws, state, code)
     else
       Rails.logger.error("[AudioWS] Gemini reconnection failed after #{MAX_RECONNECT_ATTEMPTS} attempts")
-      Sessions::EndHandler.new(state.session).call(reason: 'error')
+      # Classed 'transient' rather than left as a bare error: every retry was
+      # spent, so the interview provider was unavailable. Nothing is wrong
+      # with this candidate, and the assessor needs to be able to tell that
+      # inviting them again is worth it once the provider recovers.
+      Sessions::EndHandler.new(state.session).call(reason: 'error', failure_class: 'transient')
       send_json(browser_ws, type: 'session_ended', reason: 'error',
                             message: 'The session encountered a problem. Please contact the interviewer.')
       browser_ws.close
@@ -528,7 +532,11 @@ class AudioWebSocketMiddleware
           next if state.session.reload.ended?
 
           Rails.logger.info("[AudioWS] Grace period expired — ending session #{state.session.id}")
-          Sessions::EndHandler.new(state.session).call(reason: 'error')
+          # Classed 'user' rather than left as a bare error: the browser
+          # disconnected and never came back within BROWSER_GRACE_PERIOD, so
+          # this is the candidate's connection, not our stack. An assessor who
+          # sees that knows the same candidate is worth inviting again.
+          Sessions::EndHandler.new(state.session).call(reason: 'error', failure_class: 'user')
           EM.schedule { state.gemini_client&.close }
         end
       rescue StandardError => e
