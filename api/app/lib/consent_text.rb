@@ -17,15 +17,6 @@ module ConsentText
   # readable in the database without a changelog lookup.
   VERSION = "2026-10-20-v1"
 
-  # PLACEHOLDER — needs legal review.
-  #
-  # UU PDP Pasal 21(1)(d) requires the retention period to be stated when
-  # consent is the legal basis, so this cannot be left blank. It has not been
-  # decided by anyone with the authority to decide it, so it says so rather
-  # than inventing a number that would look like a policy.
-  RETENTION = "Not yet decided — pending a retention policy. Until it is set, " \
-              "ask the recruiter who invited you for the current period."
-
   # The three things a candidate must grasp before they can agree to anything.
   # Shown without needing to expand, because consent that has to be hunted for
   # is not informed consent (Pasal 22(4)(b)).
@@ -33,16 +24,22 @@ module ConsentText
     "Your voice is sent to the AI interviewer while you speak. Under UU PDP " \
       "No. 27/2022 your voice is biometric personal data, which is treated " \
       "as sensitive.",
-    "Your answers are written down, stored, and analysed by Google Gemini to " \
+    "Your answers are written down, stored, and analysed by AI to " \
       "build a competency assessment for this role.",
     "Only the recruiting team for this position can read what you said and " \
       "what the model concluded from it."
   ].freeze
 
   # UU PDP Pasal 21(1) lists seven things a controller must disclose when
-  # processing rests on consent. They are kept as seven entries, in the order
-  # the statute uses, because a spec asserts that count — so a requirement
-  # dropped from this list fails the build rather than quietly going missing.
+  # processing rests on consent. Six are implemented here, in the order the
+  # statute uses, and a spec asserts the exact list so that a disclosure
+  # dropped later fails the build rather than quietly going missing.
+  #
+  # (d), the retention period, is deliberately absent. No retention period has
+  # been decided yet. Writing one in front of a candidate that nobody has
+  # committed to honouring would be worse than saying nothing, so this is
+  # carried as an open requirement — to be settled with legal review, and
+  # reported as unfinished rather than as done.
   #
   # [label, text]
   DETAILS = [
@@ -73,10 +70,6 @@ module ConsentText
     ["How long we process it",
      "During this interview session, and for as long as the hiring team is " \
      "reviewing candidates for this role."],
-
-    # (d) jangka waktu retensi dokumen yang memuat Data Pribadi
-    ["How long we keep it",
-     RETENTION],
 
     # (g) hak Subjek Data Pribadi
     ["Your rights",

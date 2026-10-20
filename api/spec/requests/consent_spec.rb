@@ -21,30 +21,44 @@ RSpec.describe 'Candidate consent', type: :request do
       expect(consent['granted']).to be false
     end
 
-    it 'discloses all seven items UU PDP Pasal 21(1) requires when consent is the basis' do
+    it 'discloses six of the seven items UU PDP Pasal 21(1) requires' do
       get "/api/v1/sessions/#{session.invite_token}/candidate"
 
       labels = json_response['consent']['details'].map { |d| d['label'] }
 
-      expect(labels.size).to eq(7)
-      expect(labels).to include(
-        'Legal basis',            # (a)
-        'Purpose',                # (b)
-        'Why this data is relevant to you', # (c)
-        'What we collect',        # (e)
-        'How long we process it', # (f)
-        'How long we keep it',    # (d)
-        'Your rights'             # (g)
+      # Asserted as an exact ordered list rather than a subset, so a
+      # disclosure dropped later fails here instead of going unnoticed.
+      #
+      # (d), the retention period, is the one deliberately missing: no
+      # retention period has been decided, so none is claimed.
+      expect(labels).to eq(
+        [
+          'Legal basis',                      # (a)
+          'Purpose',                          # (b)
+          'Why this data is relevant to you', # (c)
+          'What we collect',                  # (e)
+          'How long we process it',           # (f)
+          'Your rights'                       # (g)
+        ]
       )
     end
 
-    it 'does not leave retention blank, because Pasal 21(1)(d) requires it' do
+    it 'claims no retention period, because none has been decided' do
       get "/api/v1/sessions/#{session.invite_token}/candidate"
 
-      retention = json_response['consent']['details'].find { |d| d['label'] == 'How long we keep it' }
+      labels = json_response['consent']['details'].map { |d| d['label'] }
 
-      expect(retention['text']).to be_present
-      expect(retention['text']).to include('pending a retention policy')
+      expect(labels).not_to include('How long we keep it')
+    end
+
+    it 'names no vendor, since the model behind the assessment can change' do
+      get "/api/v1/sessions/#{session.invite_token}/candidate"
+
+      everything = (json_response['consent']['summary'] +
+                    json_response['consent']['details'].map { |d| d['text'] }).join(' ')
+
+      expect(everything).to match(/\bAI\b/)
+      expect(everything).not_to match(/\b(Google|Gemini|OpenAI|Anthropic|Claude)\b/i)
     end
 
     it 'states that voice is sent but raw audio is not retained' do
