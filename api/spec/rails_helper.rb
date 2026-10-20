@@ -5,6 +5,14 @@ require_relative '../config/environment'
 # Prevent database truncation if the environment is production
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require 'rspec/rails'
+require 'shoulda/matchers'
+
+Shoulda::Matchers.configure do |config|
+  config.integrate do |with|
+    with.test_framework :rspec
+    with.library :rails
+  end
+end
 # Add additional requires below this line. Rails is not loaded until this point!
 
 # Requires supporting ruby files with custom matchers and macros, etc, in
@@ -31,6 +39,12 @@ rescue ActiveRecord::PendingMigrationError => e
 end
 Rack::Attack.enabled = false
 RSpec.configure do |config|
+  config.include FactoryBot::Syntax::Methods
+
+  # spec/support/ holds the tenant + JWT helpers that request and model specs
+  # need. Tenant resolution normally happens in middleware, which a spec never
+  # traverses, so that state has to be set by hand.
+  Dir[Rails.root.join('spec/support/**/*.rb')].sort.each { |f| require f }
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_path = Rails.root.join('spec/fixtures')
 
