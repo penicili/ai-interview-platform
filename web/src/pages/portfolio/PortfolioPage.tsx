@@ -236,19 +236,34 @@ export default function PortfolioPage() {
       {!generating && portfolio?.generation_status === "complete" && (
         <>
           {/* Configured skills */}
-          <div className="space-y-3">
-            <h2 className="text-sm font-semibold">Configured Skills</h2>
-            {portfolio.skills
-              .filter((s) => !s.is_discovered)
-              .map((skill) => (
-                <SkillPortfolioCard
-                  key={skill.id}
-                  skill={skill}
-                  override={overrides[skill.id]}
-                  onOverrideSaved={(o) => handleOverrideSaved(skill.id, o)}
-                />
-              ))}
-          </div>
+          {/* A finished portfolio with nothing in it is a legitimate outcome, not
+              an error: the interview ended before any configured skill was
+              covered. Rendering the heading over an empty list said nothing at
+              all, which reads to an assessor as "the results are gone" — and
+              the brief names unassessed skills as an edge case by name. */}
+          {portfolio.skills.length === 0 ? (
+            <div className="border rounded-lg p-8 text-center space-y-1.5">
+              <p className="font-medium">No skills were assessed in this interview.</p>
+              <p className="text-sm text-muted-foreground">
+                The interview ended before any of this assessment's skills was
+                covered, so there is nothing to score yet.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold">Configured Skills</h2>
+              {portfolio.skills
+                .filter((s) => !s.is_discovered)
+                .map((skill) => (
+                  <SkillPortfolioCard
+                    key={skill.id}
+                    skill={skill}
+                    override={overrides[skill.id]}
+                    onOverrideSaved={(o) => handleOverrideSaved(skill.id, o)}
+                  />
+                ))}
+            </div>
+          )}
 
           {/* Discovered skills */}
           {portfolio.skills.some((s) => s.is_discovered) && (
