@@ -11,6 +11,7 @@ export interface Assessment {
   latest_session?: {
     status: "pending" | "active" | "ended";
     end_reason?: string | null;
+    failure_class?: string | null;
   };
 }
 
@@ -41,6 +42,7 @@ export interface Session {
   invite_url: string;
   status: "pending" | "active" | "ended";
   end_reason?: string;
+  failure_class?: string | null;
   started_at?: string;
   ended_at?: string;
   duration_seconds?: number;
