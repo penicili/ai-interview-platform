@@ -224,6 +224,7 @@ module Api
           invite_url:       session.invite_url,
           status:           session.status,
           end_reason:       session.end_reason,
+          failure_class:    session.failure_class,
           started_at:       session.started_at,
           ended_at:         session.ended_at,
           duration_seconds: session.duration_seconds,
