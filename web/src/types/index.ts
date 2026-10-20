@@ -159,11 +159,26 @@ export interface SkillTaxonomy {
   l5_anchor: string;
 }
 
+export interface ConsentDetail {
+  label: string;
+  text: string;
+}
+
+export interface ConsentBlock {
+  version: string;
+  required: boolean;
+  summary: string[];
+  details: ConsentDetail[];
+  granted: boolean;
+  accepted_at: string | null;
+}
+
 export interface CandidateInfo {
   session_id: number;
   role_title: string;
   time_limit_min: number;
   session_status: string;
+  consent: ConsentBlock;
 }
 
 export interface PaginationMeta {
