@@ -1,5 +1,18 @@
 import { useRef, useState, useCallback } from "react";
 
+// A muted microphone and a quiet room both deliver samples, so the track never
+// ends and nothing in the readyState watchdog fires. The worklet reports its
+// measured level several times a second instead, and this is the bar the page
+// applies to it.
+//
+// The threshold is deliberately low and the window deliberately long: ordinary
+// speech sits far above SILENT_RMS, so this cannot fire while someone is
+// talking, and ten seconds of near-silence during the candidate's own turn is
+// worth mentioning. The warning clears itself the moment sound returns, so a
+// false positive costs a moment of confusion rather than an interview.
+const SILENT_RMS = 0.001;
+const SILENCE_MS = 10_000;
+
 interface UseAudioCaptureOptions {
   onFrame: (buffer: ArrayBuffer) => void;
   onError?: (error: Error) => void;
@@ -28,6 +41,12 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
   // Chromium does not announce a dead track through events alone, so the
   // readyState is polled while capture is live. See the note in start().
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // When sound was last heard, and whether the page is currently showing the
+  // "no sound" branch of the warning. Separate from micLost's origin so that
+  // sound returning cannot clear a warning caused by a track that actually
+  // ended.
+  const lastSoundAtRef = useRef(Date.now());
+  const silencedRef = useRef(false);
 
   const start = useCallback(async () => {
     if (isCapturing) return;
@@ -52,6 +71,19 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
         // to the server as though it were audio.
         if (data instanceof ArrayBuffer) {
           if (!mutedRef.current) onFrame(data);
+          return;
+        }
+
+        // The worklet's periodic measurement. Sound at or above the bar both
+        // resets the silence timer and clears a warning that silence caused.
+        if (data && data.type === "level") {
+          if (data.rms >= SILENT_RMS) {
+            lastSoundAtRef.current = Date.now();
+            if (silencedRef.current) {
+              silencedRef.current = false;
+              setMicLost(false);
+            }
+          }
           return;
         }
 
@@ -85,15 +117,40 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
         // Chromium 156 nothing warned at all until readyState was read
         // directly, and that read was 'ended' in every observed case.
         //
-        // 'ended' is terminal: it can be set but never cleared, so this can
-        // only ever warn. It also cannot false-positive on a quiet candidate,
-        // which is the whole reason the threshold above exists.
+        // 'ended' is terminal: it can be set but never cleared, so this branch
+        // can only ever warn.
+        //
+        // Silence is the other half, and it is handled here rather than in the
+        // track events because a muted microphone fires nothing at all: the
+        // track stays 'live' and keeps delivering samples — they are just
+        // silent. The worklet reports the measured level; this is where the
+        // page decides that too long without sound is worth saying out loud.
         if (watchdogRef.current) clearInterval(watchdogRef.current);
         watchdogRef.current = setInterval(() => {
-          if (activeRef.current && track.readyState === "ended") setMicLost(true);
+          if (!activeRef.current) return;
+
+          if (track.readyState === "ended") {
+            setMicLost(true);
+            return;
+          }
+
+          // Only during the candidate's own turn. While the AI is speaking the
+          // gate is closed and the microphone is deliberately not being sent,
+          // so counting silence then would fire on every single turn.
+          if (
+            !mutedRef.current &&
+            Date.now() - lastSoundAtRef.current > SILENCE_MS
+          ) {
+            silencedRef.current = true;
+            setMicLost(true);
+          }
         }, 1000);
       }
 
+      // Reset the silence clock to the moment capture began, so a hook that was
+      // mounted long before start() cannot warn on its first tick.
+      lastSoundAtRef.current = Date.now();
+      silencedRef.current = false;
       activeRef.current = true;
       setMicLost(false);
       setIsCapturing(true);
@@ -110,6 +167,10 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
 
   const unmute = useCallback(() => {
     mutedRef.current = false;
+    // The gate was closed while the AI spoke, so the silence clock is stale by
+    // however long that turn took. Restart it, or the candidate is warned the
+    // instant their turn begins.
+    lastSoundAtRef.current = Date.now();
   }, []);
 
   const stop = useCallback(() => {
@@ -125,6 +186,7 @@ export function useAudioCapture({ onFrame, onError }: UseAudioCaptureOptions) {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     mutedRef.current = false;
+    silencedRef.current = false;
     setMicLost(false);
     setIsCapturing(false);
   }, []);
